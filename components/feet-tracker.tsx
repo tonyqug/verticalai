@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState, useCallback } from "react"
 import * as tf from "@tensorflow/tfjs"
 import "@tensorflow/tfjs-backend-webgl"
+import "@tensorflow/tfjs-backend-wasm";
 import * as poseDetection from "@tensorflow-models/pose-detection"
 import getBestCameraStream from "./camera-stream"
 
@@ -93,7 +94,14 @@ export default function FeetTracker({
     try {
       setModelLoading(true)
       await tf.ready()
-      await tf.setBackend("webgl")
+      const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if (isIOS) {
+        await tf.setBackend("wasm");
+        console.log("Using WASM backend for iOS");
+      } else {
+        await tf.setBackend("webgl");
+        console.log("Using WebGL backend");
+      }
       const detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, {
         modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
         enableSmoothing: true,
