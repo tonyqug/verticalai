@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState, useCallback } from "react"
 import * as tf from "@tensorflow/tfjs"
 import "@tensorflow/tfjs-backend-webgl"
-import "@tensorflow/tfjs-backend-wasm";
+import "@tensorflow/tfjs-backend-wasm"
 import * as poseDetection from "@tensorflow-models/pose-detection"
 import getBestCameraStream from "./camera-stream"
 
@@ -163,10 +163,7 @@ export default function FeetTracker({
     setMaxHeight(0)
     setFlightTime(0)
     setLastJumpHeight(0)
-    setBestFlightTime(0)
-    setBestFlightJump(0)
-    setBestMaxHeight(0)
-    setBestMaxJump(0)
+    // Note: Best jump stats are NOT reset now so they persist across recordings.
     processVideo()
     return () => {
       setIsProcessing(false)
@@ -213,7 +210,6 @@ export default function FeetTracker({
       }
 
       try {
-        // Removed tf.tidy since detector.estimatePoses is asynchronous.
         const poses = await detector.estimatePoses(videoRef.current!, {
           flipHorizontal: facingMode === "user",
         });
@@ -279,19 +275,28 @@ export default function FeetTracker({
         const relativeJumpHeight = groundLevelRef.current !== null ? jumpMaxHeight - groundLevelRef.current : 0
 
         if (jumpFlightTime > 0.1) {
-          const newJumpCount = jumpCount + 1
-          setJumpCount(newJumpCount)
-          setFlightTime(jumpFlightTime)
-          setLastJumpHeight(relativeJumpHeight)
-          setMaxHeight((prev) => Math.max(prev, relativeJumpHeight))
-          if (jumpFlightTime > bestFlightTime) {
-            setBestFlightTime(jumpFlightTime)
-            setBestFlightJump(newJumpCount)
-          }
-          if (relativeJumpHeight > bestMaxHeight) {
-            setBestMaxHeight(relativeJumpHeight)
-            setBestMaxJump(newJumpCount)
-          }
+          // Use functional update to ensure correct jump numbering
+          setJumpCount(prev => {
+            const newJumpCount = prev + 1
+            setFlightTime(jumpFlightTime)
+            setLastJumpHeight(relativeJumpHeight)
+            setMaxHeight(prevMax => Math.max(prevMax, relativeJumpHeight))
+            setBestFlightTime(prevBestFlightTime => {
+              if (jumpFlightTime > prevBestFlightTime) {
+                setBestFlightJump(newJumpCount)
+                return jumpFlightTime
+              }
+              return prevBestFlightTime
+            })
+            setBestMaxHeight(prevBestMaxHeight => {
+              if (relativeJumpHeight > prevBestMaxHeight) {
+                setBestMaxJump(newJumpCount)
+                return relativeJumpHeight
+              }
+              return prevBestMaxHeight
+            })
+            return newJumpCount
+          })
         }
       }
     }
@@ -349,7 +354,14 @@ export default function FeetTracker({
     for (const [from, to] of connections) {
       const fromKeypoint = pose.keypoints.find((kp) => kp.name === from)
       const toKeypoint = pose.keypoints.find((kp) => kp.name === to)
-      if (fromKeypoint && toKeypoint && fromKeypoint.score && toKeypoint.score && fromKeypoint.score > 0.3 && toKeypoint.score > 0.3) {
+      if (
+        fromKeypoint &&
+        toKeypoint &&
+        fromKeypoint.score &&
+        toKeypoint.score &&
+        fromKeypoint.score > 0.3 &&
+        toKeypoint.score > 0.3
+      ) {
         ctx.beginPath()
         ctx.moveTo(fromKeypoint.x, fromKeypoint.y)
         ctx.lineTo(toKeypoint.x, toKeypoint.y)
