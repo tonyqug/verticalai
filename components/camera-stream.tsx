@@ -3,7 +3,7 @@ export default async function getBestCameraStream(facingMode = "environment") {
       // Get list of available video devices (cameras)
       const devices = await navigator.mediaDevices.enumerateDevices();
       const videoDevices = devices.filter(device => device.kind === "videoinput");
-      console.log("videoDevices", videoDevices)
+      console.log("videoDevices", videoDevices);
       let bestStream = null;
       let maxFps = 0;
   
@@ -47,11 +47,34 @@ export default async function getBestCameraStream(facingMode = "environment") {
         }
       }
   
+      // Fallback for iOS devices if no stream was found
+      if (!bestStream) {
+        const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+        if (isIOS) {
+          try {
+            console.log("iOS fallback: trying simpler constraints");
+            const fallbackConstraints = {
+              video: {
+                facingMode,
+                width: { ideal: 640 },
+                height: { ideal: 360 },
+                frameRate: { ideal: 30 } // Lower frame rate for compatibility
+              },
+              audio: false,
+            };
+            bestStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+          } catch (fallbackError) {
+            console.warn("Fallback constraints failed:", fallbackError);
+          }
+        }
+      }
+  
       if (!bestStream) throw new Error("No suitable camera found.");
       return bestStream;
-  
+    
     } catch (error) {
       console.error("Error selecting best camera stream:", error);
       return null;
     }
   }
+  

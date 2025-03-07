@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -16,29 +16,50 @@ import { FlipHorizontal } from "lucide-react"
 export default function Home() {
   const [isRecording, setIsRecording] = useState(false)
   const [showTracking, setShowTracking] = useState(true)
-  const [feetData, setFeetData] = useState<{ timestamp: number; leftFoot: number; rightFoot: number; minHeight: number }[]>([])
+  const [feetData, setFeetData] = useState<
+    { timestamp: number; leftFoot: number; rightFoot: number; minHeight: number }[]
+  >([])
   const [activeTab, setActiveTab] = useState("live")
   const [cameraFacingMode, setCameraFacingMode] = useState<"user" | "environment">("environment")
 
+  // Refs for buffering graph data and tracking recording start time
+  const graphBufferRef = useRef<
+    { timestamp: number; leftFoot: number; rightFoot: number; minHeight: number }[]
+  >([])
+  const startTimeRef = useRef<number>(0)
+
+  // Reset graph data and initialize buffer when recording starts
   useEffect(() => {
     if (isRecording) {
       setFeetData([])
+      graphBufferRef.current = []
+      startTimeRef.current = Date.now()
     }
   }, [isRecording])
 
+  // Flush buffered graph data once per second
+  useEffect(() => {
+    if (isRecording) {
+      const interval = setInterval(() => {
+        if (graphBufferRef.current.length > 0) {
+          setFeetData((prev) => [...prev, ...graphBufferRef.current])
+          graphBufferRef.current = []
+        }
+      }, 1000)
+      return () => clearInterval(interval)
+    }
+  }, [isRecording])
+
+  // Modified callback to push data into buffer rather than updating state immediately
   const handleFeetHeightUpdate = (leftFoot: number, rightFoot: number) => {
-    setFeetData((prev) => {
-      const minHeight = leftFoot !== 0 && rightFoot !== 0 ? Math.min(leftFoot, rightFoot) : Math.max(leftFoot, rightFoot)
-      const newData = [
-        ...prev,
-        {
-          timestamp: prev.length / 30, // Convert frames to seconds assuming 30 FPS
-          leftFoot,
-          rightFoot,
-          minHeight,
-        },
-      ]
-      return newData
+    const minHeight =
+      leftFoot !== 0 && rightFoot !== 0 ? Math.min(leftFoot, rightFoot) : Math.max(leftFoot, rightFoot)
+    const timestamp = startTimeRef.current ? (Date.now() - startTimeRef.current) / 1000 : 0
+    graphBufferRef.current.push({
+      timestamp,
+      leftFoot,
+      rightFoot,
+      minHeight,
     })
   }
 
@@ -55,7 +76,7 @@ export default function Home() {
         <div className="container mx-auto max-w-7xl">
           <header className="flex justify-between items-center mb-8">
             <div>
-              <h1 className="text-3xl font-bold text-primary">Vertical AI</h1>
+              <h1 className="text-3xl font-bold text-primary">VerticAi</h1>
               <p className="text-muted-foreground">Real-time live tracking and height analysis</p>
             </div>
             <ThemeToggle />
