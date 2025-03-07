@@ -4,6 +4,7 @@ import { useRef, useEffect, useState, useCallback } from "react"
 import * as tf from "@tensorflow/tfjs"
 import "@tensorflow/tfjs-backend-webgl"
 import * as poseDetection from "@tensorflow-models/pose-detection"
+import getBestCameraStream from "./camera-stream"
 
 interface FeetTrackerProps {
   isRecording: boolean
@@ -43,26 +44,21 @@ export default function FeetTracker({
 
   // Setup camera
   const setupCamera = useCallback(async () => {
+    console.log("DEBUG: Starting setupCamera with facingMode:", facingMode)
     setCameraLoading(true)
     setError(null)
 
     try {
       // Stop any existing stream
       if (streamRef.current) {
+        console.log("DEBUG: Stopping previous camera stream")
         streamRef.current.getTracks().forEach((track) => track.stop())
       }
 
       // Get user media
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode,
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 30 },
-        },
-        audio: false,
-      })
+      const stream = await getBestCameraStream();
 
+      console.log("DEBUG: Camera stream obtained", stream)
       streamRef.current = stream
 
       if (videoRef.current) {
@@ -71,15 +67,21 @@ export default function FeetTracker({
         videoRef.current.setAttribute("webkit-playsinline", "true")
 
         videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play().catch((e) => {
-            console.error("Error playing video:", e)
-            setError("Could not play video. Please ensure you've granted camera permissions.")
-          })
-          setCameraLoading(false)
+          console.log("DEBUG: Video metadata loaded, starting playback")
+          videoRef.current
+            ?.play()
+            .then(() => {
+              console.log("DEBUG: Video is playing")
+              setCameraLoading(false)
+            })
+            .catch((e) => {
+              console.error("Error playing video:", e)
+              setError("Could not play video. Please ensure you've granted camera permissions.")
+            })
         }
       }
     } catch (err: any) {
-      console.error("Error accessing camera:", err)
+      console.error("DEBUG: Error accessing camera:", err)
       setCameraLoading(false)
 
       if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
@@ -96,12 +98,15 @@ export default function FeetTracker({
 
   // Setup TensorFlow model
   const setupModel = useCallback(async () => {
+    console.log("DEBUG: Starting setupModel")
     try {
       setModelLoading(true)
 
       // Initialize TensorFlow
       await tf.ready()
+      console.log("DEBUG: TensorFlow is ready")
       await tf.setBackend("webgl")
+      console.log("DEBUG: Backend set to webgl")
 
       // Create pose detector
       const detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, {
@@ -110,23 +115,33 @@ export default function FeetTracker({
       })
 
       detectorRef.current = detector
+      console.log("DEBUG: Pose detector created:", detector)
       setModelLoading(false)
       return detector
     } catch (err) {
-      console.error("Error loading pose detection model:", err)
+      console.error("DEBUG: Error loading pose detection model:", err)
       setError("Failed to load pose detection model. Please try again.")
       setModelLoading(false)
       return null
     }
   }, [])
 
+
+  const processingRef = useRef(isProcessing)
+  useEffect(() => {
+    processingRef.current = isProcessing
+  }, [isProcessing])
+
+
   // Initialize
   useEffect(() => {
+    console.log("DEBUG: useEffect initialize - setupCamera and setupModel")
     setupCamera()
     setupModel()
 
     return () => {
       // Cleanup
+      console.log("DEBUG: Cleanup - stopping camera stream and canceling animation frame")
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop())
         streamRef.current = null
@@ -141,12 +156,15 @@ export default function FeetTracker({
 
   // Handle camera change
   useEffect(() => {
+    console.log("DEBUG: Facing mode changed, reinitializing camera to", facingMode)
     setupCamera()
   }, [facingMode, setupCamera])
 
   // Start/stop processing
   useEffect(() => {
+    console.log("DEBUG: useEffect for processing - isRecording:", isRecording, "error:", error)
     if (!isRecording || !videoRef.current || error || modelLoading || cameraLoading) {
+      console.log("DEBUG: Not processing because conditions not met", isRecording, videoRef.current, error, modelLoading, cameraLoading)
       setIsProcessing(false)
       if (requestRef.current) {
         cancelAnimationFrame(requestRef.current)
@@ -155,6 +173,7 @@ export default function FeetTracker({
       return
     }
 
+    console.log("DEBUG: Starting processing")
     setIsProcessing(true)
 
     // Reset tracking data when starting new recording
@@ -171,6 +190,7 @@ export default function FeetTracker({
     processVideo()
 
     return () => {
+      console.log("DEBUG: Stopping processing")
       setIsProcessing(false)
       if (requestRef.current) {
         cancelAnimationFrame(requestRef.current)
@@ -181,12 +201,19 @@ export default function FeetTracker({
 
   // Process video frames
   const processVideo = async () => {
-    if (!videoRef.current || !canvasRef.current || !detectorRef.current) return
+    console.log("DEBUG: processVideo called")
+    if (!videoRef.current || !canvasRef.current || !detectorRef.current) {
+      console.log("DEBUG: processVideo aborted - Missing video, canvas, or detector")
+      return
+    }
 
     const detector = detectorRef.current
 
     const detectPose = async (time: number) => {
-      if (!isProcessing || !videoRef.current || !canvasRef.current) {
+      // Log the time each frame is processed (throttled)
+      console.log("DEBUG: detectPose called at time:", time)
+      if (!processingRef.current || !videoRef.current || !canvasRef.current) {
+        console.log("DEBUG: Exiting detectPose - not processing or missing video/canvas")
         if (requestRef.current) {
           cancelAnimationFrame(requestRef.current)
           requestRef.current = null
@@ -195,7 +222,7 @@ export default function FeetTracker({
       }
 
       // Throttle processing to ~30fps
-      if (time - lastTimeRef.current < 30) {
+      if (time - lastTimeRef.current < 60) {
         requestRef.current = requestAnimationFrame(detectPose)
         return
       }
@@ -206,6 +233,7 @@ export default function FeetTracker({
       const ctx = canvas.getContext("2d")
 
       if (!ctx) {
+        console.log("DEBUG: No canvas context available")
         requestRef.current = requestAnimationFrame(detectPose)
         return
       }
@@ -215,6 +243,7 @@ export default function FeetTracker({
       const videoHeight = videoRef.current.videoHeight || 480
 
       if (canvas.width !== videoWidth || canvas.height !== videoHeight) {
+        console.log("DEBUG: Updating canvas size to", videoWidth, videoHeight)
         canvas.width = videoWidth
         canvas.height = videoHeight
       }
@@ -228,13 +257,14 @@ export default function FeetTracker({
         const poses = await detector.estimatePoses(videoRef.current, {
           flipHorizontal: facingMode === "user",
         })
+        console.log("DEBUG: Detected poses:", poses)
 
         if (poses.length > 0) {
           const pose = poses[0]
           processPose(ctx, pose, canvas.width, canvas.height, time)
         }
       } catch (err) {
-        console.error("Error processing video frame:", err)
+        console.error("DEBUG: Error processing video frame:", err)
       }
 
       requestRef.current = requestAnimationFrame(detectPose)
@@ -251,16 +281,33 @@ export default function FeetTracker({
     height: number,
     timestamp: number,
   ) => {
+    console.log("DEBUG: Processing pose data at timestamp:", timestamp)
     // Get ankle keypoints
     const leftAnkle = pose.keypoints.find((kp) => kp.name === "left_ankle")
     const rightAnkle = pose.keypoints.find((kp) => kp.name === "right_ankle")
 
-    if (!leftAnkle || !rightAnkle) return
+    if (!leftAnkle || !rightAnkle) {
+      console.log("DEBUG: Missing ankle keypoints", { leftAnkle, rightAnkle })
+      return
+    }
 
+
+    var leftFootHeight;
+    var rightFootHeight;
+
+    if (leftAnkle.score && rightAnkle.score && rightAnkle.score + leftAnkle.score < 0.6){
+      leftFootHeight = 0
+      rightFootHeight = 0
+    }
+    else{
+      leftFootHeight = height - leftAnkle.y
+      rightFootHeight = height - rightAnkle.y
+    }
     // Calculate feet heights (distance from bottom of frame)
-    const leftFootHeight = height - leftAnkle.y
-    const rightFootHeight = height - rightAnkle.y
-    const avgFootHeight = (leftFootHeight + rightFootHeight) / 2
+    
+    
+    const avgFootHeight = Math.min(leftFootHeight,rightFootHeight)
+    console.log("DEBUG: Foot heights calculated:", { leftFootHeight, rightFootHeight, avgFootHeight })
 
     // Store for tracking
     feetPositionsRef.current.push(avgFootHeight)
@@ -271,34 +318,41 @@ export default function FeetTracker({
     // Determine ground level
     if (groundLevelRef.current === null) {
       groundLevelRef.current = avgFootHeight
+      console.log("DEBUG: Ground level set to:", groundLevelRef.current)
     } else {
       // Update ground level if we find a lower position (with some tolerance)
       if (avgFootHeight < groundLevelRef.current && avgFootHeight > groundLevelRef.current - 100) {
         groundLevelRef.current = avgFootHeight
+        console.log("DEBUG: Ground level updated to:", groundLevelRef.current)
       }
     }
 
     // Detect jumps
     const jumpThreshold = 20 // pixels above ground level
     const isInAir = groundLevelRef.current !== null && avgFootHeight > groundLevelRef.current + jumpThreshold
+    console.log("DEBUG: isInAir:", isInAir)
 
     // Jump detection logic
     if (isInAir && !inAirRef.current) {
       // Jump start
       inAirRef.current = true
       jumpStartTimeRef.current = timestamp
+      console.log("DEBUG: Jump started at:", timestamp)
     } else if (!isInAir && inAirRef.current) {
       // Jump end
       inAirRef.current = false
+      console.log("DEBUG: Jump ended at:", timestamp)
 
       if (jumpStartTimeRef.current !== null) {
         // Calculate flight time
         const jumpFlightTime = (timestamp - jumpStartTimeRef.current) / 1000 // seconds
+        console.log("DEBUG: Jump flight time:", jumpFlightTime)
 
         // Calculate max height during jump
         const recentHeights = feetPositionsRef.current.slice(-15)
         const jumpMaxHeight = Math.max(...recentHeights)
         const relativeJumpHeight = groundLevelRef.current !== null ? jumpMaxHeight - groundLevelRef.current : 0
+        console.log("DEBUG: Jump max height:", jumpMaxHeight, "relative jump height:", relativeJumpHeight)
 
         // Only count as jump if flight time is significant
         if (jumpFlightTime > 0.1) {
@@ -306,6 +360,12 @@ export default function FeetTracker({
           setFlightTime(jumpFlightTime)
           setLastJumpHeight(relativeJumpHeight)
           setMaxHeight((prev) => Math.max(prev, relativeJumpHeight))
+          console.log("DEBUG: Jump counted. Updated stats:", {
+            jumpCount: jumpCount + 1,
+            flightTime: jumpFlightTime,
+            lastJumpHeight: relativeJumpHeight,
+            maxHeight: Math.max(maxHeight, relativeJumpHeight),
+          })
         }
       }
     }
@@ -342,6 +402,7 @@ export default function FeetTracker({
       ctx.fillStyle = "rgba(255, 255, 255, 0.7)"
       ctx.font = "12px Arial"
       ctx.fillText("Ground Level", 10, height - groundLevelRef.current - 5)
+      console.log("DEBUG: Ground level drawn at:", height - groundLevelRef.current)
     }
 
     // Draw skeleton
@@ -362,7 +423,6 @@ export default function FeetTracker({
       ["nose", "right_shoulder"],
     ]
 
-    // Draw connections
     ctx.strokeStyle = "rgba(255, 255, 255, 0.5)"
     ctx.lineWidth = 2
 
@@ -388,7 +448,6 @@ export default function FeetTracker({
     // Draw keypoints
     for (const keypoint of pose.keypoints) {
       if (keypoint.score && keypoint.score > 0.3) {
-        // Special highlighting for ankles
         if (keypoint.name === "left_ankle") {
           ctx.fillStyle = "rgba(59, 130, 246, 0.7)" // blue
           ctx.beginPath()
@@ -406,7 +465,6 @@ export default function FeetTracker({
           ctx.lineWidth = 2
           ctx.stroke()
         } else {
-          // Other keypoints
           ctx.fillStyle = "rgba(255, 255, 255, 0.7)"
           ctx.beginPath()
           ctx.arc(keypoint.x, keypoint.y, 4, 0, Math.PI * 2)
@@ -421,11 +479,13 @@ export default function FeetTracker({
       ctx.fillStyle = "rgba(255, 255, 255, 0.8)"
       ctx.font = "16px Arial"
       ctx.fillText(`Height: ${currentJumpHeight.toFixed(1)}px`, width / 2 - 50, 30)
+      console.log("DEBUG: Drawing jump height:", currentJumpHeight)
     }
   }
 
   // Retry camera setup
   const retryCamera = () => {
+    console.log("DEBUG: Retrying camera setup")
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop())
       streamRef.current = null
@@ -496,4 +556,3 @@ export default function FeetTracker({
     </div>
   )
 }
-
