@@ -1,7 +1,3 @@
-Here is a professional, visually appealing, and informative README file for the **VerticalAI** repository:
-
----
-
 # VerticAI - AI-Powered Jump Height Estimation
 
 **VerticAI** is an advanced computer-vision application designed to estimate athletic performance, particularly **jump height**, using live tracking and airtime physics. Leveraging AI-powered motion analysis, it provides an accurate and accessible way to measure jump performance without specialized hardware.
@@ -72,5 +68,3 @@ This project is **open-source** and available under the [MIT License](LICENSE).
 ---
 
 🚀 **VerticalAI** makes athletic performance tracking more accessible and smarter than ever! Give it a try today! 🎯🏆
-
----
