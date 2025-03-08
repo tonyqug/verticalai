@@ -2,7 +2,8 @@
 
 **VerticAI** is an advanced computer-vision application designed to estimate athletic performance, particularly **jump height**, using live tracking and airtime physics. Leveraging AI-powered motion analysis, it provides an accurate and accessible way to measure jump performance without specialized hardware.
 
-![VerticalAI Banner](https://your-image-link-here) <!-- Add an image or GIF showcasing the app -->
+![VerticalAI Banner](![image](https://github.com/user-attachments/assets/6b1515b9-3aba-4d41-9078-5d4c0861e1e2)
+) <!-- Add an image or GIF showcasing the app -->
 
 ## 🚀 Features
 
