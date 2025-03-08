@@ -22,7 +22,7 @@ export default async function getBestCameraStream(facingMode = "environment") {
               facingMode: { ideal: facingMode },
               width: { ideal: resolution.width },
               height: { ideal: resolution.height },
-              frameRate: { ideal: 60, max: 120 } // Request highest FPS
+              frameRate: { ideal: 30, max: 120 } // Request highest FPS
             },
             audio: false,
           };
