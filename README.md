@@ -32,35 +32,6 @@
 3. **AI analyzes the movement** 🧠 – Using computer vision and physics-based models  
 4. **Get instant results** 📊 – View accurate jump height and analytics  
 
-## 🏗 Installation & Usage
-
-### 🔧 Local Setup
-
-```sh
-# Clone the repository
-git clone https://github.com/tonyqug/verticalai.git
-cd verticalai
-
-# Install dependencies
-npm install
-
-# Start the development server
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) in your browser to access the app.
-
-### 🌍 Deployment
-
-To deploy the application, follow standard **Vercel** or **Netlify** deployment steps.
-
-## 📢 Contributing
-
-Contributions are welcome! If you’d like to improve the project, feel free to:
-- Fork the repository 🍴
-- Create a new feature branch 🌱
-- Submit a pull request 🔄
-
 ## 📜 License
 
 This project is **open-source** and available under the [MIT License](LICENSE).
