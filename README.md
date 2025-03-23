@@ -38,4 +38,4 @@ This project is **open-source** and available under the [MIT License](LICENSE).
 
 ---
 
-🚀 **VerticalAI** makes athletic performance tracking more accessible and smarter than ever! Give it a try today! 🎯🏆
+🚀 **VerticalAI** makes athletic performance tracking more accessible and smarter than ever!🎯🏆
